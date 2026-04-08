@@ -243,4 +243,3 @@ def attendance_by_month(request):
 
 
 
-    

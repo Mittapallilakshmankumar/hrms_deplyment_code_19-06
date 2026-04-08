@@ -68,6 +68,7 @@ INSTALLED_APPS = [
       'finance',#frined
 'common',#frined
 'accounts', #frined
+'django_crontab',#autologout
 ]
 
 MIDDLEWARE = [
@@ -208,3 +209,8 @@ REST_FRAMEWORK = {
         'rest_framework.filters.OrderingFilter',
     ),
 }
+
+
+CRONJOBS = [
+    ('0 23 * * *', 'attendance.tasks.auto_checkout'),
+]
