@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { useAuth, useLoading } from "../components/AppProviders";
 import apiClient, {
   EXPENSE_CATEGORIES,
-  PAYMENT_MODES,
   ROLES,
   emitDashboardRefresh,
   formatCurrency,
@@ -16,6 +15,11 @@ import PageHero from "../components/PageHero";
 async function listAdvances(params = {}) {
   const response = await apiClient.get("advances/", { params });
   return getListData(response.data);
+}
+
+async function getFinancialSummary() {
+  const response = await apiClient.get("advances/financial-summary/");
+  return response.data;
 }
 
 async function listCheckerOptionsApi() {
@@ -176,11 +180,10 @@ function Input({
       value={value}
       onChange={onChange}
       {...props}
-      className={`w-full rounded-lg bg-white px-4 py-3 text-sm text-gray-800 outline-none transition ${
-        error
+      className={`w-full rounded-lg bg-white px-4 py-3 text-sm text-gray-800 outline-none transition ${error
           ? "border border-red-300 focus:border-red-500"
           : "border border-gray-300 focus:border-blue-900"
-      }`}
+        }`}
     />
   );
 }
@@ -190,11 +193,10 @@ function Select({ children, value, onChange, error = false }) {
     <select
       value={value}
       onChange={onChange}
-      className={`w-full rounded-lg bg-white px-4 py-3 text-sm text-gray-800 outline-none transition ${
-        error
+      className={`w-full rounded-lg bg-white px-4 py-3 text-sm text-gray-800 outline-none transition ${error
           ? "border border-red-300 focus:border-red-500"
           : "border border-gray-300 focus:border-blue-900"
-      }`}
+        }`}
     >
       {children}
     </select>
@@ -216,11 +218,10 @@ function Textarea({ rows = 4, placeholder = "", value, onChange, error = false }
       placeholder={placeholder}
       value={value}
       onChange={onChange}
-      className={`w-full rounded-lg bg-white px-4 py-3 text-sm text-gray-800 outline-none transition ${
-        error
+      className={`w-full rounded-lg bg-white px-4 py-3 text-sm text-gray-800 outline-none transition ${error
           ? "border border-red-300 focus:border-red-500"
           : "border border-gray-300 focus:border-blue-900"
-      }`}
+        }`}
     />
   );
 }
@@ -247,35 +248,33 @@ function BalanceCard({ title, value }) {
 }
 
 function ExpensePreviewCard({
-  advance,
+  financialSummary,
   amount,
   reviewedBy,
   approvedBy,
   sameCheckerSelected,
 }) {
-  const advanceTotal = Number(advance?.total_amount || 0);
-  const advanceSpent = Number(advance?.spent_amount || 0);
-  const spentAmount = advance ? advanceSpent + Number(amount || 0) : 0;
-  const remainingBalance = advance ? Math.max(advanceTotal - spentAmount, 0) : 0;
+  const currentAvailable = Number(financialSummary?.current_available_balance || 0);
+  const remainingBalance = Math.max(currentAvailable - Number(amount || 0), 0);
 
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-md">
       <h4 className="text-sm font-semibold text-gray-800">Expense Preview</h4>
       <p className="mt-2 text-sm text-gray-500">
-        Maker spends from the selected advance balance, then uploads the bill after checker approval.
+        Maker spends from the pooled available balance, then uploads the bill after checker approval.
       </p>
       <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
         <BalanceCard
-          title="Allocated Amount"
-          value={advance ? formatCurrency(advance.total_amount) : "Select advance"}
+          title="Total Allocated"
+          value={formatCurrency(financialSummary?.total_allocated || 0)}
         />
         <BalanceCard
           title="Spent After This Entry"
-          value={advance ? formatCurrency(spentAmount) : "-"}
+          value={formatCurrency(Number(financialSummary?.total_spent || 0) + Number(amount || 0))}
         />
         <BalanceCard
-          title="Remaining Balance"
-          value={advance ? formatCurrency(remainingBalance) : "-"}
+          title="Remaining Available Balance"
+          value={formatCurrency(remainingBalance)}
         />
       </div>
       <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -322,44 +321,6 @@ function getExpenseDateRange() {
   };
 }
 
-function PaymentModeOption({ label, active = false, onClick }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex min-h-[50px] items-center gap-3 rounded-lg border px-4 py-3 text-left text-sm transition ${
-        active
-          ? "border-blue-900 bg-blue-50 text-blue-900"
-          : "border-gray-300 bg-white text-gray-700 hover:bg-gray-100"
-      }`}
-    >
-      <span
-        className={`flex h-4 w-4 items-center justify-center rounded-sm border ${
-          active ? "border-blue-900 bg-blue-900" : "border-gray-400 bg-white"
-        }`}
-      >
-        {active ? <span className="h-2 w-2 rounded-[2px] bg-white" /> : null}
-      </span>
-      <span className="font-medium">{label}</span>
-    </button>
-  );
-}
-
-function stripTransactionReference(text = "") {
-  return text.replace(/\s*-\s*UTR ID:\s*[^-]+$/i, "").replace(/\s*UTR ID:\s*[^-]+$/i, "").trim();
-}
-
-function buildRemarks(baseRemarks, paymentMode, transactionReference) {
-  const cleanRemarks = stripTransactionReference(baseRemarks);
-  const cleanReference = String(transactionReference || "").trim();
-
-  if (paymentMode !== "UPI" || !cleanReference) {
-    return cleanRemarks;
-  }
-
-  return cleanRemarks ? `${cleanRemarks} - UTR ID: ${cleanReference}` : `UTR ID: ${cleanReference}`;
-}
-
 export default function NewExpensePage() {
   const navigate = useNavigate();
   const { role, user, extractErrorMessage } = useAuth();
@@ -367,21 +328,19 @@ export default function NewExpensePage() {
   const { defaultDate, minDate, maxDate } = useMemo(() => getExpenseDateRange(), []);
 
   const [advances, setAdvances] = useState([]);
+  const [financialSummary, setFinancialSummary] = useState(null);
   const [checkerUsers, setCheckerUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState({});
   const [formData, setFormData] = useState({
-    advanceId: "",
     payableTo: "",
     expenseDate: defaultDate,
     amount: "",
     amountInWords: "",
     category: "",
     purpose: "",
-    paymentMode: "",
-    transactionReference: "",
     remarks: "",
     reviewedBy: "",
     approvedBy: "",
@@ -391,16 +350,17 @@ export default function NewExpensePage() {
     async function loadFormOptions() {
       try {
         setLoading(true);
-        const [advanceList, checkers] = await Promise.all([
+        const [advanceList, summary, checkers] = await Promise.all([
           listAdvances(),
+          getFinancialSummary(),
           listCheckerOptionsApi(),
         ]);
         const availableAdvances = advanceList.filter((item) => Number(item.balance_amount) > 0);
         setAdvances(availableAdvances);
+        setFinancialSummary(summary);
         setCheckerUsers(checkers);
         setFormData((prev) => ({
           ...prev,
-          advanceId: prev.advanceId || String(availableAdvances[0]?.id || ""),
           reviewedBy: prev.reviewedBy || String(checkers[0]?.id || ""),
           approvedBy: prev.approvedBy || String(checkers[1]?.id || checkers[0]?.id || ""),
         }));
@@ -414,10 +374,6 @@ export default function NewExpensePage() {
     loadFormOptions();
   }, [extractErrorMessage, setGlobalLoading]);
 
-  const selectedAdvance = useMemo(
-    () => advances.find((item) => String(item.id) === String(formData.advanceId)),
-    [advances, formData.advanceId]
-  );
   const reviewedByUser = useMemo(
     () => checkerUsers.find((item) => String(item.id) === String(formData.reviewedBy)),
     [checkerUsers, formData.reviewedBy]
@@ -430,22 +386,15 @@ export default function NewExpensePage() {
     () => formData.reviewedBy && formData.approvedBy && formData.reviewedBy === formData.approvedBy,
     [formData.approvedBy, formData.reviewedBy]
   );
-  const computedRemarks = useMemo(
-    () => buildRemarks(formData.remarks, formData.paymentMode, formData.transactionReference),
-    [formData.paymentMode, formData.remarks, formData.transactionReference]
-  );
 
   const preparedByName = user?.full_name || user?.username || "Current maker";
   const receivedByName = formData.payableTo?.trim();
-  const isCashPayment = formData.paymentMode === "Cash";
-  const isUpiPayment = formData.paymentMode === "UPI";
-  const isOtherPayment = Boolean(formData.paymentMode) && !isCashPayment && !isUpiPayment;
 
   const validateForm = useCallback(() => {
     const nextErrors = {};
     const numericAmount = Number(formData.amount);
+    const availableBalance = Number(financialSummary?.current_available_balance || 0);
 
-    if (!formData.advanceId) nextErrors.advanceId = "Please select an active advance.";
     if (!formData.payableTo.trim()) nextErrors.payableTo = "Payable To is required.";
     if (!formData.expenseDate) {
       nextErrors.expenseDate = "Expense date is required.";
@@ -458,18 +407,16 @@ export default function NewExpensePage() {
       nextErrors.amount = "Enter a valid numeric amount with up to 2 decimals.";
     } else if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
       nextErrors.amount = "Amount must be greater than zero.";
+    } else if (numericAmount > availableBalance) {
+      nextErrors.amount = "Amount cannot exceed the total available balance.";
     }
     if (!formData.category) nextErrors.category = "Expense account is required.";
-    if (!formData.paymentMode) nextErrors.paymentMode = "Payment mode is required.";
-    if (isUpiPayment && !formData.transactionReference.trim()) {
-      nextErrors.transactionReference = "UTR / TR ID is required for UPI payments.";
-    }
     if (!formData.purpose.trim()) nextErrors.purpose = "Purpose is required.";
     if (!formData.reviewedBy) nextErrors.reviewedBy = "Reviewed By is required.";
     if (!formData.approvedBy) nextErrors.approvedBy = "Approved By is required.";
 
     return nextErrors;
-  }, [formData, isUpiPayment, maxDate, minDate]);
+  }, [financialSummary?.current_available_balance, formData, maxDate, minDate]);
 
   const handleChange = (field) => (event) => {
     let nextValue = event.target.value;
@@ -483,42 +430,25 @@ export default function NewExpensePage() {
         nextValue = `${parts[0]}.${parts[1].slice(0, 2)}`;
       }
     }
-
     setFormData((prev) => ({
       ...prev,
-      [field]: field === "remarks" ? stripTransactionReference(nextValue) : nextValue,
+      [field]: nextValue,
       ...(field === "amount" ? { amountInWords: amountToWords(nextValue) } : {}),
-      ...(field === "paymentMode" && nextValue !== "UPI" ? { transactionReference: "" } : {}),
     }));
-    setFieldErrors((prev) => ({ ...prev, [field]: "" }));
-  };
 
-  const handlePaymentModeSelect = (nextMode) => {
-    setFormData((prev) => ({
-      ...prev,
-      paymentMode: nextMode,
-      ...(nextMode !== "UPI" ? { transactionReference: "" } : {}),
-    }));
-    setFieldErrors((prev) => ({
-      ...prev,
-      paymentMode: "",
-      transactionReference: nextMode === "UPI" ? prev.transactionReference : "",
-    }));
+    setFieldErrors((prev) => ({ ...prev, [field]: "" }));
   };
 
   const handleReset = () => {
     setFieldErrors({});
     setError("");
     setFormData({
-      advanceId: String(advances[0]?.id || ""),
       payableTo: "",
       expenseDate: defaultDate,
       amount: "",
       amountInWords: "",
       category: "",
       purpose: "",
-      paymentMode: "",
-      transactionReference: "",
       remarks: "",
       reviewedBy: String(checkerUsers[0]?.id || ""),
       approvedBy: String(checkerUsers[1]?.id || checkerUsers[0]?.id || ""),
@@ -546,16 +476,13 @@ export default function NewExpensePage() {
       setGlobalLoading(true);
       setError("");
       const created = await createExpense({
-        advance: Number(formData.advanceId),
         payable_to: formData.payableTo,
         expense_date: formData.expenseDate,
         amount: formData.amount,
         amount_in_words: formData.amountInWords,
         category: formData.category,
         purpose: formData.purpose,
-        payment_mode: formData.paymentMode,
-        transaction_reference: formData.transactionReference,
-        remarks: computedRemarks,
+        remarks: formData.remarks,
         reviewed_by: Number(formData.reviewedBy),
         approved_by: Number(formData.approvedBy),
       });
@@ -579,7 +506,7 @@ export default function NewExpensePage() {
       <div className="space-y-6">
         <PageHero
           title="New Expense"
-          subtitle="Create a new expense from an existing advance balance. The entry is saved as a draft first, then submitted for checker review."
+          subtitle="Create a new expense from the total available maker balance. The entry is saved as a draft first, then submitted for checker review."
         />
 
         <form className="space-y-6" onSubmit={handleSubmit}>
@@ -591,7 +518,7 @@ export default function NewExpensePage() {
 
           {!loading && !advances.length ? (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-              No active advance is available for this maker right now.
+              No active advance balance is available for this maker right now.
             </div>
           ) : null}
 
@@ -602,13 +529,13 @@ export default function NewExpensePage() {
           ) : null}
 
           <Section
-            title="Advance Balance Summary"
-            subtitle="Create the expense from an existing advance and keep the balance visible before submission."
+            title="Available Balance Summary"
+            subtitle="Create the expense from pooled maker balance while keeping active advance totals visible before submission."
           >
             <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-              <BalanceCard title="Total Advance" value={selectedAdvance ? formatCurrency(selectedAdvance.total_amount) : "-"} />
-              <BalanceCard title="Total Spent" value={selectedAdvance ? formatCurrency(selectedAdvance.spent_amount) : "-"} />
-              <BalanceCard title="Remaining Balance" value={selectedAdvance ? formatCurrency(selectedAdvance.balance_amount) : "-"} />
+              <BalanceCard title="Total Allocated" value={formatCurrency(financialSummary?.total_allocated || 0)} />
+              <BalanceCard title="Total Spent" value={formatCurrency(financialSummary?.total_spent || 0)} />
+              <BalanceCard title="Total Available Balance" value={formatCurrency(financialSummary?.current_available_balance || 0)} />
             </div>
           </Section>
 
@@ -617,18 +544,6 @@ export default function NewExpensePage() {
             subtitle="Voucher-style maker entry aligned to the shared image while preserving the existing expense flow."
           >
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-              <FormField label="Linked Advance" required>
-                <Select value={formData.advanceId} onChange={handleChange("advanceId")} error={Boolean(fieldErrors.advanceId)}>
-                  <option value="">{loading ? "Loading advances..." : "Select active advance"}</option>
-                  {advances.map((advance) => (
-                    <option key={advance.id} value={advance.id}>
-                      {advance.reference} - {advance.maker_details?.full_name} ({formatCurrency(advance.balance_amount)} balance)
-                    </option>
-                  ))}
-                </Select>
-                <ErrorText message={fieldErrors.advanceId} />
-              </FormField>
-
               <FormField label="PAYABLE TO" required>
                 <Input placeholder="Enter vendor, employee, or beneficiary" value={formData.payableTo} onChange={handleChange("payableTo")} error={Boolean(fieldErrors.payableTo)} />
                 <ErrorText message={fieldErrors.payableTo} />
@@ -659,55 +574,6 @@ export default function NewExpensePage() {
                 </Select>
                 <ErrorText message={fieldErrors.category} />
               </FormField>
-
-              <div className="md:col-span-2">
-                <FormField label="Mode of Payment" required>
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                    <PaymentModeOption
-                      label="CASH"
-                      active={isCashPayment}
-                      onClick={() => handlePaymentModeSelect("Cash")}
-                    />
-                    <PaymentModeOption
-                      label="PhonePe / GPay"
-                      active={isUpiPayment}
-                      onClick={() => handlePaymentModeSelect("UPI")}
-                    />
-                    <PaymentModeOption
-                      label="Others"
-                      active={isOtherPayment}
-                      onClick={() =>
-                        handlePaymentModeSelect(
-                          formData.paymentMode && formData.paymentMode !== "Cash" && formData.paymentMode !== "UPI"
-                            ? formData.paymentMode
-                            : "Bank Transfer"
-                        )
-                      }
-                    />
-                  </div>
-                  <ErrorText message={fieldErrors.paymentMode} />
-                </FormField>
-              </div>
-
-              {isOtherPayment ? (
-                <FormField label="Other payment type" required>
-                  <Select value={formData.paymentMode} onChange={handleChange("paymentMode")} error={Boolean(fieldErrors.paymentMode)}>
-                    {PAYMENT_MODES.filter((mode) => mode !== "Cash" && mode !== "UPI").map((mode) => (
-                      <option key={mode} value={mode}>
-                        {mode}
-                      </option>
-                    ))}
-                  </Select>
-                </FormField>
-              ) : null}
-
-              {isUpiPayment ? (
-                <FormField label="Transaction / UTR ID" required>
-                  <Input placeholder="Enter UTR / TR ID" value={formData.transactionReference} onChange={handleChange("transactionReference")} error={Boolean(fieldErrors.transactionReference)} />
-                  <ErrorText message={fieldErrors.transactionReference} />
-                </FormField>
-              ) : null}
-
               <div className="md:col-span-2">
                 <FormField label="Details and Purpose of expenditure" required>
                   <Textarea rows={4} placeholder="Describe why this advance balance was used" value={formData.purpose} onChange={handleChange("purpose")} error={Boolean(fieldErrors.purpose)} />
@@ -749,8 +615,41 @@ export default function NewExpensePage() {
 
               <div className="md:col-span-2">
                 <FormField label="Remarks">
-                  <Input placeholder="Any transactions ID / number / UTR details etc." value={computedRemarks} onChange={handleChange("remarks")} />
+                  <Input
+                    placeholder="Enter any remarks"
+                    value={formData.remarks}
+                    onChange={handleChange("remarks")}
+                  />
                 </FormField>
+              </div>
+            </div>
+
+            <div className="mt-6 rounded-xl border border-gray-200 bg-gray-50 p-5">
+              <h4 className="text-sm font-semibold text-gray-800">Active Advance Breakdown</h4>
+              <p className="mt-1 text-sm text-gray-500">
+                This is reference-only. Approval will consume from active advances oldest first.
+              </p>
+              <div className="mt-4 space-y-3">
+                {advances.length ? (
+                  advances.map((advance) => (
+                    <div
+                      key={advance.id}
+                      className="flex flex-col gap-2 rounded-lg border border-gray-200 bg-white px-4 py-3 md:flex-row md:items-center md:justify-between"
+                    >
+                      <div>
+                        <p className="text-sm font-semibold text-gray-800">{advance.reference}</p>
+                        <p className="mt-1 text-xs text-gray-500">
+                          Total {formatCurrency(advance.total_amount)} | Spent {formatCurrency(advance.spent_amount)}
+                        </p>
+                      </div>
+                      <p className="text-sm font-semibold text-blue-900">
+                        {formatCurrency(advance.balance_amount)} available
+                      </p>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-gray-500">No active advances are available.</p>
+                )}
               </div>
             </div>
 
@@ -762,7 +661,13 @@ export default function NewExpensePage() {
             ) : null}
           </Section>
 
-          <ExpensePreviewCard advance={selectedAdvance} amount={formData.amount} reviewedBy={reviewedByUser} approvedBy={approvedByUser} sameCheckerSelected={sameCheckerSelected} />
+          <ExpensePreviewCard
+            financialSummary={financialSummary}
+            amount={formData.amount}
+            reviewedBy={reviewedByUser}
+            approvedBy={approvedByUser}
+            sameCheckerSelected={sameCheckerSelected}
+          />
 
           <ContentCard title="Voucher Actions">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -783,7 +688,7 @@ export default function NewExpensePage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={submitting || loading || !advances.length}
+                  disabled={submitting || loading || Number(financialSummary?.current_available_balance || 0) <= 0}
                   className="inline-flex min-w-[140px] items-center justify-center rounded-lg bg-blue-900 px-5 py-3 text-sm font-medium text-white transition hover:bg-blue-800 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {submitting ? "Creating..." : "Create Draft"}

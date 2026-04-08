@@ -11,6 +11,13 @@ async function createAdvance(payload) {
   return response.data;
 }
 
+async function getMakerFinancialSummary(makerId) {
+  const response = await apiClient.get("advances/financial-summary/", {
+    params: { maker_id: makerId },
+  });
+  return response.data;
+}
+
 async function listUsersApi(params = {}) {
   const response = await apiClient.get("auth/users/", { params });
   return response.data;
@@ -64,35 +71,60 @@ function Textarea({ value, onChange, rows = 4, placeholder = "" }) {
   );
 }
 
-function PreviewCard({ maker, amount }) {
+function SummaryCard({ title, value }) {
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+      <p className="text-xs font-medium text-gray-500">{title}</p>
+      <p className="mt-2 text-sm font-semibold text-gray-800">{value}</p>
+    </div>
+  );
+}
+
+function PreviewCard({ maker, amount, financialSummary, summaryLoading }) {
   return (
     <ContentCard title="Allocation Preview">
       <div className="rounded-2xl border border-gray-200 bg-gray-50 p-5 shadow-sm">
         <p className="text-sm font-medium text-gray-700">
-          The selected maker will start with the full allocated amount as the current balance.
+          Review the maker's running financial position before allocating a new advance.
         </p>
 
         <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
-          <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-            <p className="text-xs font-medium text-gray-500">Maker</p>
-            <p className="mt-2 text-sm font-semibold text-gray-800">
-              {maker?.full_name || maker?.maker_name || "Not selected"}
-            </p>
-          </div>
-
-          <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-            <p className="text-xs font-medium text-gray-500">Allocated Amount</p>
-            <p className="mt-2 text-sm font-semibold text-gray-800">
-              {amount ? formatCurrency(amount) : "-"}
-            </p>
-          </div>
-
-          <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-            <p className="text-xs font-medium text-gray-500">Current Balance</p>
-            <p className="mt-2 text-sm font-semibold text-gray-800">
-              {amount ? formatCurrency(amount) : "-"}
-            </p>
-          </div>
+          <SummaryCard
+            title="Maker"
+            value={maker?.full_name || maker?.maker_name || "Not selected"}
+          />
+          <SummaryCard
+            title="Total Allocated Till Now"
+            value={
+              summaryLoading
+                ? "Loading..."
+                : formatCurrency(financialSummary?.total_allocated || 0)
+            }
+          />
+          <SummaryCard
+            title="Total Spent Till Now"
+            value={
+              summaryLoading
+                ? "Loading..."
+                : formatCurrency(financialSummary?.total_spent || 0)
+            }
+          />
+          <SummaryCard
+            title="Current Available Balance"
+            value={
+              summaryLoading
+                ? "Loading..."
+                : formatCurrency(financialSummary?.current_available_balance || 0)
+            }
+          />
+          <SummaryCard
+            title="Active Advances"
+            value={summaryLoading ? "Loading..." : String(financialSummary?.active_advances || 0)}
+          />
+          <SummaryCard
+            title="New Allocation Amount"
+            value={amount ? formatCurrency(amount) : "-"}
+          />
         </div>
       </div>
     </ContentCard>
@@ -107,8 +139,10 @@ export default function AllocateAdvancePage() {
   const [makers, setMakers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [summaryLoading, setSummaryLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [financialSummary, setFinancialSummary] = useState(null);
   const [formData, setFormData] = useState({
     maker: "",
     totalAmount: "",
@@ -148,6 +182,27 @@ export default function AllocateAdvancePage() {
     () => makers.find((maker) => String(maker.id) === String(formData.maker)),
     [makers, formData.maker]
   );
+
+  useEffect(() => {
+    async function loadFinancialSummary() {
+      if (!formData.maker) {
+        setFinancialSummary(null);
+        return;
+      }
+
+      try {
+        setSummaryLoading(true);
+        const summary = await getMakerFinancialSummary(formData.maker);
+        setFinancialSummary(summary);
+      } catch (apiError) {
+        setError(extractErrorMessage(apiError, "Unable to load maker financial summary."));
+      } finally {
+        setSummaryLoading(false);
+      }
+    }
+
+    loadFinancialSummary();
+  }, [extractErrorMessage, formData.maker]);
 
   const handleChange = (field) => (event) => {
     setFormData((prev) => ({
@@ -257,7 +312,12 @@ export default function AllocateAdvancePage() {
           </div>
         </ContentCard>
 
-        <PreviewCard maker={selectedMaker} amount={allocationAmount} />
+        <PreviewCard
+          maker={selectedMaker}
+          amount={allocationAmount}
+          financialSummary={financialSummary}
+          summaryLoading={summaryLoading}
+        />
       </div>
     </Layout>
   );

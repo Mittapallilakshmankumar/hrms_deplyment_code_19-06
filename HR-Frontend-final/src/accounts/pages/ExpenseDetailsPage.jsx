@@ -130,6 +130,22 @@ function getBillUrl(expense) {
   return buildAbsoluteUrl(expense.bill_file);
 }
 
+function getPaymentReferenceLabel(paymentMode) {
+  if (paymentMode === "UPI") {
+    return "UTR / TR ID";
+  }
+
+  if (paymentMode === "Bank Transfer") {
+    return "Bank Reference Number";
+  }
+
+  if (paymentMode === "Other") {
+    return "Payment Details";
+  }
+
+  return "Payment Reference";
+}
+
 export default function ExpenseDetailsPage() {
   const { id } = useParams();
   const location = useLocation();
@@ -186,8 +202,11 @@ export default function ExpenseDetailsPage() {
   const rejectRoleLabel = isReviewerReject ? "Reviewer" : "Approver";
   const isAssignedReviewer = user?.id === expense?.reviewed_by;
   const isAssignedApprover = user?.id === expense?.approved_by;
+  const paymentReferenceLabel = getPaymentReferenceLabel(expense?.payment_mode);
   const backPath =
-    role === ROLES.CHECKER
+    role === ROLES.ADMIN
+      ? "/admin/dashboard"
+      : role === ROLES.CHECKER
       ? expense?.status === STATUS.REVIEWED
         ? "/pending-approval"
         : expense?.status === STATUS.BILL_SUBMITTED
@@ -391,36 +410,6 @@ export default function ExpenseDetailsPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-5">
-          <div className="rounded-xl border border-slate-200 bg-white p-5">
-            <p className="text-sm font-medium text-slate-500">Linked Advance</p>
-            <h3 className="mt-3 text-2xl font-semibold text-slate-800">{advance?.reference || "-"}</h3>
-          </div>
-          <div className="rounded-xl border border-slate-200 bg-white p-5">
-            <p className="text-sm font-medium text-slate-500">Total Advance</p>
-            <h3 className="mt-3 text-2xl font-semibold text-slate-800">
-              {formatCurrency(advance?.total_amount)}
-            </h3>
-          </div>
-          <div className="rounded-xl border border-slate-200 bg-white p-5">
-            <p className="text-sm font-medium text-slate-500">Total Spent</p>
-            <h3 className="mt-3 text-2xl font-semibold text-slate-800">
-              {formatCurrency(advance?.spent_amount)}
-            </h3>
-          </div>
-          <div className="rounded-xl border border-slate-200 bg-white p-5">
-            <p className="text-sm font-medium text-slate-500">Remaining Balance</p>
-            <h3 className="mt-3 text-2xl font-semibold text-slate-800">
-              {formatCurrency(advance?.balance_amount)}
-            </h3>
-          </div>
-          <div className="rounded-xl border border-slate-200 bg-white p-5">
-            <p className="text-sm font-medium text-slate-500">Expense Amount</p>
-            <h3 className="mt-3 text-2xl font-semibold text-slate-800">
-              {formatCurrency(expense.amount)}
-            </h3>
-          </div>
-        </div>
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
           <div className="space-y-6 xl:col-span-2">
@@ -435,7 +424,7 @@ export default function ExpenseDetailsPage() {
                 <Field label="Amount In Words" value={expense.amount_in_words} />
                 <Field label="Category" value={expense.category} />
                 <Field label="Payment Mode" value={expense.payment_mode} />
-                <Field label="UTR / TR ID" value={expense.transaction_reference} />
+                <Field label={paymentReferenceLabel} value={expense.transaction_reference} />
                 <Field
                   label="Bill File"
                   value={expense.bill_file_name || "-"}
@@ -456,30 +445,7 @@ export default function ExpenseDetailsPage() {
               </div>
             </ContentCard>
 
-            <ContentCard title="Advance Ledger">
-              <div className="space-y-4">
-                {ledgerEntries.map((entry) => (
-                  <div
-                    key={entry.id}
-                    className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 md:flex-row md:items-center md:justify-between"
-                  >
-                    <div>
-                      <p className="text-sm font-semibold text-slate-800">
-                        {entry.entry_type === "ADVANCE" ? "Advance Allocated" : "Expense Spent"}
-                      </p>
-                      <p className="mt-1 text-xs text-slate-500">{entry.created_at?.slice(0, 10)}</p>
-                    </div>
-                    <div className="text-sm text-slate-700">
-                      <span className="font-semibold">{formatCurrency(entry.amount)}</span>
-                      {"  "}Balance After:{" "}
-                      <span className="font-semibold text-blue-600">
-                        {formatCurrency(entry.balance_after)}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </ContentCard>
+            */}
           </div>
 
           <div className="space-y-6">

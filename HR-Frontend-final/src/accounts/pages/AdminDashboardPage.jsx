@@ -278,17 +278,38 @@ export default function AdminDashboardPage() {
     }
   };
 
-  const toggleAssignmentStatus = async (assignment) => {
+  const toggleAssignmentAccess = async (assignment, nextIsActive) => {
+    if (!assignment || assignment.is_active === nextIsActive) {
+      return;
+    }
+
+    const employeeName = assignment?.employee?.name || assignment?.user?.full_name || assignment?.user?.username || "this employee";
+    const actionLabel = nextIsActive ? "add" : "remove";
+    const confirmed = window.confirm(
+      nextIsActive
+        ? `Add Maker-Checker access for ${employeeName}? This will only reactivate the existing role assignment and will not modify the HR employee record.`
+        : `Remove Maker-Checker access for ${employeeName}? This will only deactivate the role assignment and will not delete the HR employee record.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
     try {
       setSavingAssignment(true);
       setError("");
       setSuccess("");
-      const response = await updateRoleAssignmentApi(assignment.id, { is_active: !assignment.is_active });
+      const response = await updateRoleAssignmentApi(assignment.id, { is_active: nextIsActive });
       mergeAssignmentRow(response.assignment);
-      setSuccess(`Maker-Checker access ${assignment.is_active ? "removed" : "restored"} successfully.`);
+      setSuccess(`Maker-Checker access ${actionLabel === "add" ? "added" : "removed"} successfully.`);
       await Promise.allSettled([loadRoleAssignmentData(), getAdminDashboard().then(setDashboard)]);
     } catch (apiError) {
-      setError(extractErrorMessage(apiError, "Unable to update Maker-Checker access."));
+      setError(
+        extractErrorMessage(
+          apiError,
+          `Unable to ${actionLabel} Maker-Checker access.`
+        )
+      );
     } finally {
       setSavingAssignment(false);
     }
@@ -533,9 +554,15 @@ export default function AdminDashboardPage() {
                             ) : (
                               <>
                                 <button type="button" onClick={() => startEdit(assignment)} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700">Edit Role</button>
-                                <button type="button" onClick={() => toggleAssignmentStatus(assignment)} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700">
-                                  {assignment.is_active ? "Deactivate" : "Reactivate"}
-                                </button>
+                                {assignment.is_active ? (
+                                  <button type="button" onClick={() => toggleAssignmentAccess(assignment, false)} className="rounded-lg border border-rose-300 px-3 py-2 text-xs font-semibold text-rose-700">
+                                    Remove
+                                  </button>
+                                ) : (
+                                  <button type="button" onClick={() => toggleAssignmentAccess(assignment, true)} className="rounded-lg border border-emerald-300 px-3 py-2 text-xs font-semibold text-emerald-700">
+                                    Add
+                                  </button>
+                                )}
                               </>
                             )}
                           </div>

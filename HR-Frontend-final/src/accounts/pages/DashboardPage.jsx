@@ -603,21 +603,7 @@ export default function DashboardPage() {
           </div>
         ) : (
           <>
-            <NotificationPanel
-              notifications={notifications}
-              unreadCount={unreadCount}
-              emptyTitle={
-                role === ROLES.MAKER
-                  ? "No maker notifications yet"
-                  : "No checker notifications yet"
-              }
-              helperText={
-                role === ROLES.MAKER
-                  ? "Approved, rejected, and next-step updates will appear here."
-                  : "Review and approval notifications will appear here."
-              }
-              onOpenNotification={handleOpenNotification}
-            />
+            
 
             {refreshing ? (
               <div className="text-right text-xs font-medium text-gray-400">

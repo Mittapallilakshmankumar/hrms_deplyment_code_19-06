@@ -29,9 +29,18 @@ async function listExpenses(params = {}) {
   return getListData(response.data);
 }
 
-async function uploadBill(id, billFile) {
+async function uploadBill(id, payload) {
   const formData = new FormData();
-  formData.append("bill_file", billFile);
+  formData.append("bill_file", payload.billFile);
+  formData.append("payment_mode", payload.paymentMode);
+
+  if (payload.transactionReference) {
+    formData.append("transaction_reference", payload.transactionReference);
+  }
+
+  if (payload.paymentDetails) {
+    formData.append("payment_details", payload.paymentDetails);
+  }
 
   const response = await apiClient.post(`expenses/${id}/upload-bill/`, formData, {
     headers: {
@@ -80,6 +89,15 @@ function UploadRow({ item, advance, onUpload, loading, maxBillUploadSize }) {
   const [localSuccess, setLocalSuccess] = useState("");
   const [localError, setLocalError] = useState("");
 
+  const [paymentMode, setPaymentMode] = useState("");
+  const [transactionReference, setTransactionReference] = useState("");
+  const [paymentDetails, setPaymentDetails] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
+
+  const isUpiPayment = paymentMode === "UPI";
+  const isOtherPayment = paymentMode === "Other";
+  const isBankTransfer = paymentMode === "Bank Transfer";
+
   const handleFileChange = (event) => {
     const nextFile = event.target.files?.[0] || null;
     const allowedTypes = ["application/pdf", "image/png", "image/jpeg"];
@@ -111,6 +129,33 @@ function UploadRow({ item, advance, onUpload, loading, maxBillUploadSize }) {
     setSelectedFile(nextFile);
     setLocalError("");
     setLocalSuccess("");
+  };
+  const validateUploadForm = () => {
+    const nextErrors = {};
+
+    if (!paymentMode) {
+      nextErrors.paymentMode = "Mode of Payment is required.";
+    }
+
+    if (isUpiPayment && !transactionReference.trim()) {
+      nextErrors.transactionReference = "UTR / Transaction ID is required for UPI.";
+    }
+
+    if (isBankTransfer && !transactionReference.trim()) {
+      nextErrors.transactionReference = "Bank reference number is required.";
+    }
+
+    if (isOtherPayment && !paymentDetails.trim()) {
+      nextErrors.paymentDetails = "Payment details are required.";
+    }
+
+    if (!selectedFile) {
+      nextErrors.billFile = "Please upload the bill file.";
+    }
+
+    setFieldErrors(nextErrors);
+
+    return Object.keys(nextErrors).length === 0;
   };
 
   return (
@@ -174,6 +219,94 @@ function UploadRow({ item, advance, onUpload, loading, maxBillUploadSize }) {
             <p className="mt-1 text-xs text-gray-500">
               Attach the final bill for checker verification and expense closure.
             </p>
+            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">
+                  Mode of Payment <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={paymentMode}
+                  onChange={(event) => {
+                    const nextValue = event.target.value;
+                    setPaymentMode(nextValue);
+                    setTransactionReference("");
+                    setPaymentDetails("");
+                    setFieldErrors((prev) => ({
+                      ...prev,
+                      paymentMode: "",
+                      transactionReference: "",
+                      paymentDetails: "",
+                    }));
+                  }}
+                  className={`w-full rounded-lg bg-white px-4 py-3 text-sm text-gray-800 outline-none transition ${fieldErrors.paymentMode
+                    ? "border border-red-300 focus:border-red-500"
+                    : "border border-gray-300 focus:border-blue-900"
+                    }`}
+                >
+                  <option value="">Select payment mode</option>
+                  <option value="Cash">Cash</option>
+                  <option value="UPI">UPI</option>
+                  <option value="Bank Transfer">Bank Transfer</option>
+                  <option value="Other">Other</option>
+                </select>
+                {fieldErrors.paymentMode ? (
+                  <p className="mt-2 text-sm text-red-600">{fieldErrors.paymentMode}</p>
+                ) : null}
+              </div>
+
+              {(isUpiPayment || isBankTransfer) ? (
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                    {isUpiPayment ? "Transaction / UTR ID" : "Bank Reference Number"}{" "}
+                    <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={transactionReference}
+                    onChange={(event) => {
+                      setTransactionReference(event.target.value);
+                      setFieldErrors((prev) => ({ ...prev, transactionReference: "" }));
+                    }}
+                    placeholder={
+                      isUpiPayment ? "Enter UTR / Transaction ID" : "Enter bank reference number"
+                    }
+                    className={`w-full rounded-lg bg-white px-4 py-3 text-sm text-gray-800 outline-none transition ${fieldErrors.transactionReference
+                      ? "border border-red-300 focus:border-red-500"
+                      : "border border-gray-300 focus:border-blue-900"
+                      }`}
+                  />
+                  {fieldErrors.transactionReference ? (
+                    <p className="mt-2 text-sm text-red-600">
+                      {fieldErrors.transactionReference}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {isOtherPayment ? (
+                <div className="md:col-span-2">
+                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                    Payment Details <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={paymentDetails}
+                    onChange={(event) => {
+                      setPaymentDetails(event.target.value);
+                      setFieldErrors((prev) => ({ ...prev, paymentDetails: "" }));
+                    }}
+                    placeholder="Enter payment details"
+                    className={`w-full rounded-lg bg-white px-4 py-3 text-sm text-gray-800 outline-none transition ${fieldErrors.paymentDetails
+                      ? "border border-red-300 focus:border-red-500"
+                      : "border border-gray-300 focus:border-blue-900"
+                      }`}
+                  />
+                  {fieldErrors.paymentDetails ? (
+                    <p className="mt-2 text-sm text-red-600">{fieldErrors.paymentDetails}</p>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
 
             <div className="mt-4 flex flex-wrap gap-3">
               <input
@@ -186,18 +319,32 @@ function UploadRow({ item, advance, onUpload, loading, maxBillUploadSize }) {
                 type="button"
                 disabled={!selectedFile || loading}
                 onClick={async () => {
-                  const uploaded = await onUpload(item.id, selectedFile);
+                  if (!validateUploadForm()) {
+                    setLocalSuccess("");
+                    return;
+                  }
+
+                  const uploaded = await onUpload(item.id, {
+                    billFile: selectedFile,
+                    paymentMode,
+                    transactionReference,
+                    paymentDetails,
+                  });
+
                   if (uploaded) {
                     setLocalSuccess("Bill uploaded successfully");
                     setLocalError("");
                     setSelectedFile(null);
+                    setPaymentMode("");
+                    setTransactionReference("");
+                    setPaymentDetails("");
+                    setFieldErrors({});
                   }
                 }}
-                className={`rounded-lg px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-60 ${
-                  selectedFile
-                    ? "bg-blue-900 text-white hover:bg-blue-800 hover:shadow-md"
-                    : "border border-gray-300 bg-gray-100 text-gray-500"
-                }`}
+                className={`rounded-lg px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-60 ${selectedFile
+                  ? "bg-blue-900 text-white hover:bg-blue-800 hover:shadow-md"
+                  : "border border-gray-300 bg-gray-100 text-gray-500"
+                  }`}
               >
                 {loading ? "Uploading..." : selectedFile ? "Upload Bill" : "Choose Bill First"}
               </button>
@@ -207,6 +354,9 @@ function UploadRow({ item, advance, onUpload, loading, maxBillUploadSize }) {
             ) : null}
             {localError ? (
               <p className="mt-2 text-sm text-rose-600">{localError}</p>
+            ) : null}
+            {fieldErrors.billFile ? (
+              <p className="mt-2 text-sm text-red-600">{fieldErrors.billFile}</p>
             ) : null}
             {localSuccess ? (
               <p className="mt-2 text-sm text-emerald-600">{localSuccess}</p>
@@ -297,13 +447,13 @@ export default function UploadBillPage() {
     0
   );
 
-  const handleUpload = async (expenseId, file) => {
+  const handleUpload = async (expenseId, payload) => {
     try {
       setUploadingId(expenseId);
       setGlobalLoading(true);
       setError("");
       setSuccess("");
-      await uploadBill(expenseId, file);
+      await uploadBill(expenseId, payload);
       setSuccess("Bill uploaded successfully.");
       await loadData();
       emitDashboardRefresh({ source: "bill-uploaded", expenseId });

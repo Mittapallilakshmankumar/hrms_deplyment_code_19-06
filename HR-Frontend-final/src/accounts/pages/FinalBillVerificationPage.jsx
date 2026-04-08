@@ -77,6 +77,22 @@ function getBillPreviewType(path = "") {
   return "other";
 }
 
+function getPaymentReferenceLabel(paymentMode) {
+  if (paymentMode === "UPI") {
+    return "UTR / TR ID";
+  }
+
+  if (paymentMode === "Bank Transfer") {
+    return "Bank Reference Number";
+  }
+
+  if (paymentMode === "Other") {
+    return "Payment Details";
+  }
+
+  return "Payment Reference";
+}
+
 function BillPreviewPanel({ expense, onClose }) {
   if (!expense?.bill_file) {
     return (
@@ -151,6 +167,8 @@ function BillPreviewPanel({ expense, onClose }) {
 }
 
 function VerificationRow({ item, advance, onAction, onViewBill, loadingAction }) {
+  const paymentReferenceLabel = getPaymentReferenceLabel(item.payment_mode);
+
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-5">
       <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
@@ -222,6 +240,11 @@ function VerificationRow({ item, advance, onAction, onViewBill, loadingAction })
               <div>
                 <p className="text-xs font-medium text-slate-500">Created At</p>
                 <p className="mt-1 text-sm text-slate-800">{item.created_at?.slice(0, 10)}</p>
+              </div>
+
+              <div>
+                <p className="text-xs font-medium text-slate-500">{paymentReferenceLabel}</p>
+                <p className="mt-1 text-sm text-slate-800">{item.transaction_reference || "-"}</p>
               </div>
             </div>
 
