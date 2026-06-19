@@ -42,10 +42,7 @@ SECRET_KEY = os.getenv(
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = get_bool_env("DJANGO_DEBUG", True)
 
-ALLOWED_HOSTS = get_list_env(
-    "DJANGO_ALLOWED_HOSTS",
-    ["localhost", "127.0.0.1"],
-)
+ALLOWED_HOSTS = ["*"]
 
 
 # Application definition
@@ -108,15 +105,14 @@ WSGI_APPLICATION = 'hrms.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': os.getenv('DB_ENGINE', 'django.db.backends.postgresql'),
-        'NAME': os.getenv('DB_NAME', 'hrmsaccounts1'),
-        'USER': os.getenv('DB_USER', 'postgres'),
-        'PASSWORD': os.getenv('DB_PASSWORD', '2001'),
-        'HOST': os.getenv('DB_HOST', 'localhost'),
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.getenv('DB_NAME'),
+        'USER': os.getenv('DB_USER'),
+        'PASSWORD': os.getenv('DB_PASSWORD'),
+        'HOST': os.getenv('DB_HOST'),
         'PORT': os.getenv('DB_PORT', '5432'),
     }
 }
-
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators
 
